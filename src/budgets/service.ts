@@ -1,6 +1,5 @@
 import { query } from '../db/client.js';
-import { config } from '../config.js';
-import { fmtCurrency } from '../utils/format.js';
+import { fmtAmount } from '../utils/format.js';
 
 export function formatBudgetAlert(
   category: string,
@@ -10,10 +9,10 @@ export function formatBudgetAlert(
 ): string {
   const percentage = Math.round((spent / limit) * 100);
   if (threshold >= 100) {
-    return `🚨 Budget exceeded: You've spent ${config.currency} ${fmtCurrency(spent)} of your ${config.currency} ${fmtCurrency(limit)} ${category} budget (${percentage}%).`;
+    return `🚨 Budget exceeded: You've spent ${fmtAmount(spent)} of your ${fmtAmount(limit)} ${category} budget (${percentage}%).`;
   }
   const remaining = Math.round(100 - percentage);
-  return `⚠️ Budget warning: You've spent ${config.currency} ${fmtCurrency(spent)} of your ${config.currency} ${fmtCurrency(limit)} ${category} budget (${percentage}%). ${remaining}% remaining for the rest of the month.`;
+  return `⚠️ Budget warning: You've spent ${fmtAmount(spent)} of your ${fmtAmount(limit)} ${category} budget (${percentage}%). ${remaining}% remaining for the rest of the month.`;
 }
 
 export async function setBudget(category: string, monthlyLimit: number): Promise<void> {

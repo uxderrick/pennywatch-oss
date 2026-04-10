@@ -89,10 +89,10 @@ smsRouter.post('/api/sms', async (req, res) => {
     parsed = await parseSms(sms_body, overridesResult.rows);
   } catch (err) {
     const result = await query(
-      `INSERT INTO transactions (raw_sms, sms_hash, amount, direction, type, category, source, sender, transaction_date)
-       VALUES ($1, $2, 0, 'debit', 'expense', 'unparsed', $3, $4, $5)
+      `INSERT INTO transactions (raw_sms, sms_hash, amount, currency, direction, type, category, source, sender, transaction_date)
+       VALUES ($1, $2, 0, $3, 'debit', 'expense', 'unparsed', $4, $5, $6)
        RETURNING id`,
-      [sms_body, smsHash, sender || 'unknown', sender, received_at],
+      [sms_body, smsHash, config.currency, sender || 'unknown', sender, received_at],
     );
     await logAudit(sms_body, sender, received_at, 'unparsed', result.rows[0].id, err instanceof Error ? err.message : 'Parse failed');
     notifyUnparsed(sms_body, sender).catch(console.error);
