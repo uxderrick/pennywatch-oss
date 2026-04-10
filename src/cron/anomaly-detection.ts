@@ -1,10 +1,7 @@
 import { query } from '../db/client.js';
 import { bot } from '../telegram/bot.js';
 import { config } from '../config.js';
-
-function fmtGhs(n: number): string {
-  return n.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
+import { fmtAmount } from '../utils/format.js';
 
 export function isAnomaly(currentWeek: number, weeklyAverage: number): boolean {
   if (weeklyAverage === 0) return false;
@@ -12,7 +9,7 @@ export function isAnomaly(currentWeek: number, weeklyAverage: number): boolean {
 }
 
 export function formatAnomalyAlert(category: string, current: number, average: number): string {
-  return `🔍 Unusual spending: You've spent GHS ${fmtGhs(current)} on ${category} this week. Your weekly average is GHS ${fmtGhs(average)}.`;
+  return `🔍 Unusual spending: You've spent ${fmtAmount(current)} on ${category} this week. Your weekly average is ${fmtAmount(average)}.`;
 }
 
 export async function runAnomalyDetection(): Promise<void> {

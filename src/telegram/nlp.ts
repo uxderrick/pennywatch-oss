@@ -14,17 +14,22 @@ const ResponseSchema = z.object({
   response: z.string(),
 });
 
-const SCHEMA_CONTEXT = `Database schema:
+function buildSchemaContext(): string {
+  const bankList = config.banks.map(b => `"${b.id}"`).join(', ') || '"bank_name"';
+  const categoryList = config.categories.join(', ') || 'food, transport, utilities, other';
+
+  return `Database schema:
 
 Table "transactions":
 - id: UUID (primary key)
-- amount: DECIMAL(12,2) — transaction amount in GHS
-- currency: VARCHAR(3) — always "GHS"
+- amount: DECIMAL(12,2) — transaction amount in ${config.currency}
+- currency: VARCHAR(3) — "${config.currency}"
 - direction: VARCHAR(6) — "credit" or "debit"
 - type: VARCHAR(10) — "expense", "income", or "transfer"
 - merchant: TEXT — merchant or counterparty name
-- category: VARCHAR(50) — one of: food, transport, airtime, utilities, transfers, entertainment, shopping, health, education, salary, other, unparsed
-- source: VARCHAR(20) — "absa", "mtn_momo", or "gcb"
+- category: VARCHAR(50) — e.g. ${categoryList}
+- source: VARCHAR(50) — e.g. ${bankList}
+- sender: TEXT — SMS sender number
 - transfer_group_id: UUID — nullable, links paired transfer transactions
 - transaction_date: TIMESTAMPTZ — when the transaction occurred
 - created_at: TIMESTAMPTZ — when we ingested it
@@ -43,14 +48,15 @@ Table "category_overrides":
 
 Important notes:
 - Transfers (type = 'transfer') should be excluded from spending/income calculations unless specifically asked about
-- Currency is always GHS
+- Currency is always ${config.currency}
 - Use SUM, AVG, COUNT for aggregations
 - Use TO_CHAR(transaction_date, 'YYYY-MM') for monthly grouping`;
+}
 
 export function buildQueryPrompt(question: string): string {
   return `You are a financial analysis assistant. The user will ask questions about their spending data stored in a PostgreSQL database.
 
-${SCHEMA_CONTEXT}
+${buildSchemaContext()}
 
 Generate a read-only SELECT query to answer the user's question. Only use SELECT statements — no INSERT, UPDATE, DELETE, DROP, or any write operations.
 
@@ -78,10 +84,13 @@ export async function handleNaturalLanguageQuery(question: string): Promise<stri
 
     const { sql } = queryMessage.parsed_output;
 
-    // Basic safety check — reject anything that isn't a SELECT
+    // Safety: reject anything that isn't a SELECT, or contains multiple statements
     const trimmed = sql.trim().toUpperCase();
     if (!trimmed.startsWith('SELECT') && !trimmed.startsWith('WITH')) {
       return '❌ I can only run read-only queries. Try asking a question about your spending.';
+    }
+    if (sql.includes(';')) {
+      return '❌ Only single queries are allowed.';
     }
 
     // Step 2: Execute query on readonly connection
@@ -99,7 +108,7 @@ export async function handleNaturalLanguageQuery(question: string): Promise<stri
 The SQL query returned these results:
 ${JSON.stringify(result.rows, null, 2)}
 
-Format this into a clear, readable Telegram message. Use GHS as the currency. Keep it concise. Use markdown formatting (* for bold).`,
+Format this into a clear, readable Telegram message. Use ${config.currency} as the currency. Keep it concise. Use markdown formatting (* for bold).`,
         },
       ],
       output_config: {

@@ -1,26 +1,22 @@
 {
   "name": "pennywatch",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "directories": {
-    "doc": "docs"
-  },
+  "description": "Personal finance tracker that reads bank SMS, parses with AI, and gives spending insights via Telegram",
+  "main": "src/index.ts",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js",
+    "start": "tsx src/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "migrate": "tsx src/db/migrate.ts"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": ["finance", "sms", "telegram", "ai", "budgeting"],
+  "author": "Derrick Tsorme",
+  "license": "MIT",
   "type": "commonjs",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.86.1",
-    "dotenv": "^17.4.1",
     "express": "^5.2.1",
     "node-cron": "^4.2.1",
     "pg": "^8.20.0",

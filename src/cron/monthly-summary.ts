@@ -1,14 +1,7 @@
 import { query } from '../db/client.js';
 import { bot } from '../telegram/bot.js';
 import { config } from '../config.js';
-
-function fmtGhs(n: number): string {
-  return n.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function esc(s: string): string {
-  return s.replace(/_/g, '\\_').replace(/\*/g, '\\*').replace(/\[/g, '\\[').replace(/`/g, '\\`');
-}
+import { fmtAmount, esc } from '../utils/format.js';
 
 interface MonthlySummaryData {
   month: string;
@@ -22,13 +15,13 @@ interface MonthlySummaryData {
 }
 
 export function formatMonthlySummary(data: MonthlySummaryData): string {
-  const monthName = new Date(data.month + '-01').toLocaleString('en-GH', { month: 'long', year: 'numeric' });
+  const monthName = new Date(data.month + '-01').toLocaleString('en-US', { month: 'long', year: 'numeric' });
   let msg = `📊 *Monthly Summary — ${monthName}*\n\n`;
 
-  msg += `Total Spent: GHS ${fmtGhs(data.totalSpent)}\n`;
-  msg += `Total Received: GHS ${fmtGhs(data.totalReceived)}\n`;
+  msg += `Total Spent: ${fmtAmount(data.totalSpent)}\n`;
+  msg += `Total Received: ${fmtAmount(data.totalReceived)}\n`;
   const net = data.totalReceived - data.totalSpent;
-  msg += `Net: ${net >= 0 ? '+' : ''}GHS ${fmtGhs(net)}\n`;
+  msg += `Net: ${net >= 0 ? '+' : ''}${fmtAmount(Math.abs(net))}\n`;
 
   if (data.prevMonth) {
     const spendChange = data.prevMonth.totalSpent > 0
@@ -44,19 +37,19 @@ export function formatMonthlySummary(data: MonthlySummaryData): string {
     msg += `\n*By Category:*\n`;
     for (const cat of data.categories) {
       const pct = data.totalSpent > 0 ? Math.round((cat.total / data.totalSpent) * 100) : 0;
-      msg += `• ${esc(cat.category)}: GHS ${fmtGhs(cat.total)} (${pct}%)\n`;
+      msg += `• ${esc(cat.category)}: ${fmtAmount(cat.total)} (${pct}%)\n`;
     }
   }
 
   if (data.topMerchants.length > 0) {
     msg += `\n*Top Merchants:*\n`;
     for (const m of data.topMerchants) {
-      msg += `• ${esc(m.merchant)}: GHS ${fmtGhs(m.total)} (${m.count}x)\n`;
+      msg += `• ${esc(m.merchant)}: ${fmtAmount(m.total)} (${m.count}x)\n`;
     }
   }
 
   if (data.transfersTotal > 0) {
-    msg += `\n💸 Internal transfers: GHS ${fmtGhs(data.transfersTotal)}`;
+    msg += `\n💸 Internal transfers: ${fmtAmount(data.transfersTotal)}`;
   }
 
   if (data.streaks.length > 0) {

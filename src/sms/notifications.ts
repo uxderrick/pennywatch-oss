@@ -1,14 +1,7 @@
 import { bot } from '../telegram/bot.js';
 import { config } from '../config.js';
 import { query } from '../db/client.js';
-
-function fmtGhs(n: number): string {
-  return n.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function esc(s: string): string {
-  return s.replace(/_/g, '\\_').replace(/\*/g, '\\*').replace(/\[/g, '\\[').replace(/`/g, '\\`');
-}
+import { fmtAmount, esc } from '../utils/format.js';
 
 export async function notifyUnparsed(smsBody: string, sender: string | undefined): Promise<void> {
   const preview = smsBody.length > 200 ? smsBody.slice(0, 200) + '...' : smsBody;
@@ -36,7 +29,7 @@ export async function notifyNewTransaction(transactionId: string): Promise<void>
   if (txn.type === 'transfer') return;
 
   const arrow = txn.direction === 'credit' ? '🟢 Received' : '🔴 Spent';
-  const msg = `${arrow} *GHS ${fmtGhs(Number(txn.amount))}*\n${esc(txn.merchant || 'Unknown')} — ${esc(txn.category)}\nvia ${esc(txn.source)}`;
+  const msg = `${arrow} *${fmtAmount(Number(txn.amount))}*\n${esc(txn.merchant || 'Unknown')} — ${esc(txn.category)}\nvia ${esc(txn.source)}`;
 
   await bot.telegram.sendMessage(config.telegramChatId, msg, { parse_mode: 'Markdown' });
 }

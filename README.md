@@ -1,97 +1,182 @@
 # PennyWatch
 
-Personal finance tracker that reads your bank SMS, parses them with AI, and gives you spending insights via Telegram. Works with any bank in any country.
+Personal finance tracker that reads your bank SMS, parses them with AI, and gives you spending insights via a Telegram bot. Self-hosted, single-user, works with any bank in any country.
+
+**Cost:** ~$0.50/month (LLM calls only). Everything else is free tier.
+
+---
 
 ## How It Works
 
 ```
-Bank SMS → iOS Shortcut → Your Server → Claude Haiku → Postgres → Telegram Bot
+Bank SMS → iOS Shortcut → Your Server → Claude Haiku 4.5 → Postgres → Telegram Bot
 ```
 
-1. Bank sends you a transaction SMS
-2. iOS Shortcut detects it and POSTs the text to your server
-3. Claude Haiku 4.5 extracts: amount, merchant, category, direction
-4. Data is stored in Postgres
-5. You query via Telegram: `/summary`, `/balance`, or plain English
+1. You receive a transaction SMS from your bank or mobile money service
+2. An iOS Shortcut automation detects it and POSTs the SMS text to your server
+3. The server classifies the SMS (transaction / balance check / other)
+4. If it's a transaction, Claude Haiku 4.5 extracts: amount, merchant, category, direction
+5. The parsed data is stored in Postgres
+6. You get a Telegram notification 2 minutes later
+7. You query your data anytime via Telegram commands or plain English
+
+---
 
 ## Features
 
-- **Auto SMS parsing** — LLM extracts structured data from messy bank SMS
-- **Transfer detection** — auto-links cross-account transfers so they don't inflate spending
-- **Telegram bot** — 9 commands + natural language queries
-- **Budget tracking** — set limits per category, get alerts at 80% and 100%
-- **Weekly & monthly reports** — auto-sent via Telegram
-- **Anomaly detection** — flags unusual spending patterns
-- **Budget streaks** — tracks consecutive weeks under budget
+### Core
+- **LLM-powered SMS parsing** — handles any bank's SMS format without custom regex
+- **SMS classification** — distinguishes transactions from balance checks and promos
+- **Transfer detection** — auto-links cross-account transfers (e.g., bank → mobile money) so they don't inflate spending
+- **Deduplication** — same SMS won't be logged twice even if the Shortcut fires multiple times
+
+### Telegram Bot (9 commands + natural language)
+| Command | What it does |
+|---------|-------------|
+| `/summary` | Spending by category this month |
+| `/balance` | Total income - spending this month |
+| `/top` | Top 5 spending categories |
+| `/recent` | Last 10 transactions |
+| `/budget set food 500` | Set a monthly budget for a category |
+| `/budget list` | Show all budgets with progress bars |
+| `/streaks` | Consecutive weeks under budget per category |
+| `/monthly` | Generate full monthly report on demand |
+| `/fix <id> <category>` | Correct a transaction's category (teaches the AI for future SMS) |
+| `/not_transfer <id>` | Unlink a falsely matched transfer pair |
+| *any text* | Natural language query → LLM generates SQL → returns formatted results |
+
+### Automated Reports
+- **Weekly summary** — spending breakdown, week-over-week comparison (Sundays)
+- **Monthly summary** — category breakdown, top merchants, month-over-month trends, budget streaks (1st of month)
+- **Budget alerts** — warns at 80%, alerts at 100% of budget (daily check)
+- **Anomaly detection** — flags spending 2x above your rolling average (daily check)
+- **Transaction notifications** — Telegram message for each new transaction (2 min delay for transfer matching)
+- **Unparsed SMS alerts** — instant notification when an SMS fails to parse
+
+### Data
 - **Balance snapshots** — tracks account balances from balance-check SMS
+- **Category overrides** — corrections feed back into the AI prompt for future parsing
+- **Audit log** — every incoming SMS is logged regardless of outcome
+
+---
 
 ## Quick Start
 
-### 1. Get Your Credentials
+### Prerequisites
 
-You need 3 things:
+- **Node.js 22+** (with npm)
+- A server with HTTPS (for Telegram webhooks) — any VPS, Docker host, or cloud platform
+- An iPhone (for the iOS Shortcut SMS trigger)
 
-| Credential | Where to get it |
-|-----------|----------------|
-| **Neon Postgres** | [neon.tech](https://neon.tech) — create a free project, copy the connection string |
-| **Anthropic API key** | [console.anthropic.com](https://console.anthropic.com) — create an API key |
-| **Telegram bot token** | Message [@BotFather](https://t.me/BotFather) on Telegram → `/newbot` |
+### Step 1: Get Your Credentials
 
-To get your **Telegram chat ID**: message your bot, then visit:
-```
-https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates
-```
-Look for `"chat": {"id": 123456789}`.
+You need 3 services (all have free tiers):
 
-Generate an **SMS API key**:
+#### Neon Postgres (database)
+1. Go to [neon.tech](https://neon.tech) and create a free account
+2. Create a new project (any name)
+3. Copy the connection string — it looks like: `postgresql://user:pass@ep-xxx.neon.tech/neondb?sslmode=require`
+
+#### Anthropic API (LLM)
+1. Go to [console.anthropic.com](https://console.anthropic.com)
+2. Create an API key
+3. Add a small credit balance ($5 will last months)
+
+#### Telegram Bot
+1. Open Telegram and message [@BotFather](https://t.me/BotFather)
+2. Send `/newbot`, follow the prompts, and copy the **bot token**
+3. Send any message to your new bot
+4. Visit `https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates` in your browser
+5. Find `"chat":{"id":123456789}` — that number is your **chat ID**
+
+#### SMS API Key
+Generate a random key for authenticating the iOS Shortcut:
 ```bash
 openssl rand -hex 32
 ```
 
-### 2. Configure
+### Step 2: Configure
 
-Edit `pennywatch.config.ts` — fill in your credentials and customize your banks:
+```bash
+git clone https://github.com/uxderrick/pennywatch.git
+cd pennywatch
+cp pennywatch.config.example.ts pennywatch.config.ts
+```
+
+Edit `pennywatch.config.ts`:
 
 ```typescript
 export default {
-  databaseUrl: 'postgresql://user:pass@host/db?sslmode=require',
+  // Paste your Neon connection string
+  databaseUrl: 'postgresql://user:pass@ep-xxx.neon.tech/neondb?sslmode=require',
+
+  // Paste your Anthropic API key
   anthropicApiKey: 'sk-ant-xxx',
-  telegramBotToken: '123:ABC',
+
+  // Paste your Telegram bot token and chat ID
+  telegramBotToken: '123456789:ABCdef...',
   telegramChatId: '123456789',
+
+  // Your server's public HTTPS URL
   webhookDomain: 'https://pennywatch.yourdomain.com',
-  smsApiKey: 'your-generated-key',
+  port: 3000,
+
+  // The SMS API key you generated
+  smsApiKey: 'your-random-key',
+
+  // Your local currency
   currency: 'GHS',
+
+  // Your banks — add examples so the AI parses accurately
   banks: [
-    { name: 'My Bank', id: 'my_bank', example: 'Sample SMS from my bank...' },
+    {
+      name: 'My Bank',
+      id: 'my_bank',
+      example: 'Paste a real transaction SMS from this bank here',
+    },
+  ],
+
+  // Suggested categories (AI can use others too)
+  categories: [
+    'food', 'transport', 'airtime', 'utilities', 'transfers',
+    'entertainment', 'shopping', 'health', 'education', 'salary', 'other',
   ],
 };
 ```
 
-### 3. Set Up Database
-
-Run the migration to create tables:
+### Step 3: Install & Set Up Database
 
 ```bash
 npm install
-npx tsx src/db/migrate.ts
+npm run migrate
 ```
 
-### 4. Deploy
+You should see:
+```
+Running migration: 001-initial.sql
+Completed: 001-initial.sql
+All migrations complete.
+```
 
-**Option A: Docker**
+### Step 4: Deploy
+
+#### Option A: Docker (easiest)
+
 ```bash
+# Make sure pennywatch.config.ts exists first
 docker compose up -d
 ```
 
-**Option B: Direct**
+#### Option B: Direct (development)
+
 ```bash
-npm install
-npx tsx src/index.ts
+npm start
 ```
 
-**Option C: systemd (Linux server)**
+#### Option C: Linux Server with systemd (production)
+
+Create `/etc/systemd/system/pennywatch.service`:
 ```ini
-# /etc/systemd/system/pennywatch.service
 [Unit]
 Description=PennyWatch
 After=network.target
@@ -107,26 +192,72 @@ RestartSec=5s
 WantedBy=multi-user.target
 ```
 
-You'll need HTTPS for Telegram webhooks. [Caddy](https://caddyserver.com) is the easiest:
+Then:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable pennywatch
+sudo systemctl start pennywatch
 ```
+
+#### HTTPS (required for Telegram webhooks)
+
+[Caddy](https://caddyserver.com) is the easiest — auto-SSL with zero config:
+
+```
+# /etc/caddy/Caddyfile
 pennywatch.yourdomain.com {
     reverse_proxy localhost:3000
 }
 ```
 
-### 5. Set Up iOS Shortcut
+### Step 5: Verify
 
-Create an automation in the Shortcuts app:
+Test the health endpoint:
+```bash
+curl https://your-domain/health
+# {"status":"ok","timestamp":"2026-04-09T..."}
+```
 
-1. **Trigger**: Message contains your currency code (e.g., `GHS`, `KES`, `NGN`)
-2. **Action**: POST to `https://your-domain/api/sms`
-   - Header: `Authorization: Bearer <your-sms-api-key>`
-   - Header: `Content-Type: application/json`
-   - Body (JSON): `sms_body` = message body, `sender` = sender
+Test SMS ingestion:
+```bash
+curl -X POST https://your-domain/api/sms \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_SMS_API_KEY" \
+  -d '{"sms_body": "Payment of KES 500 to Safaricom for airtime", "sender": "M-Pesa"}'
+```
 
-### 6. Set Up Bot Commands
+Send `/summary` to your Telegram bot — it should respond.
 
-Message @BotFather → `/setcommands` → select your bot → paste:
+### Step 6: Set Up iOS Shortcut
+
+#### Create the Shortcut
+1. Open **Shortcuts** app on your iPhone
+2. Tap **+** to create a new shortcut, name it **PennyWatch**
+3. Add action: **Get Contents of URL**
+   - URL: `https://your-domain/api/sms`
+   - Method: **POST**
+   - Headers:
+     - `Authorization` → `Bearer YOUR_SMS_API_KEY`
+     - `Content-Type` → `application/json`
+   - Request Body: **JSON**
+     - `sms_body` → tap and select **Shortcut Input**
+     - `sender` → tap and select **Shortcut Input**, then change to **Sender**
+
+#### Create the Automation
+1. Go to **Automation** tab → **+** → **Message**
+2. Set "Message contains" to your currency code (e.g., `GHS`, `KES`, `NGN`, `ZAR`)
+3. Set to **Run Immediately** (not "Ask Before Running")
+4. Action: **Run Shortcut** → select **PennyWatch**
+5. For input, select **Message** → tap it and pick **Body**
+
+#### Tips
+- Add multiple keyword triggers for wider coverage: your currency code, `credited`, `debited`, `Payment`
+- The dedup system prevents duplicates even if multiple automations trigger on the same SMS
+- Test manually first: open the PennyWatch shortcut, tap Run, paste a sample SMS
+
+### Step 7: Set Up Bot Commands
+
+Message [@BotFather](https://t.me/BotFather) → `/setcommands` → select your bot → paste:
 
 ```
 summary - Spending breakdown this month
@@ -140,27 +271,13 @@ fix - Override a transaction category
 not_transfer - Unlink a transfer pair
 ```
 
-## Telegram Commands
-
-| Command | Description |
-|---------|------------|
-| `/summary` | Spending by category this month |
-| `/balance` | Credits - debits this month |
-| `/top` | Top 5 spending categories |
-| `/recent` | Last 10 transactions |
-| `/budget set food 500` | Set monthly budget |
-| `/budget list` | Show budgets with progress |
-| `/streaks` | Budget streak tracker |
-| `/monthly` | Generate monthly report |
-| `/fix <id> <category>` | Correct a category |
-| `/not_transfer <id>` | Unlink a transfer pair |
-| *any text* | Natural language query |
+---
 
 ## Customization
 
-### Adding Your Banks
+### Banks
 
-In `pennywatch.config.ts`, add entries to the `banks` array. Include a real example SMS — this helps the LLM parse accurately:
+Add your banks to `pennywatch.config.ts`. Include a **real example SMS** from each bank — this dramatically improves parsing accuracy:
 
 ```typescript
 banks: [
@@ -169,30 +286,130 @@ banks: [
     id: 'mpesa',
     example: 'QH45TY67 Confirmed. Ksh500.00 sent to JOHN DOE 0712345678 on 9/4/26 at 2:30 PM. New balance is Ksh1,500.00.',
   },
+  {
+    name: 'Equity Bank',
+    id: 'equity',
+    example: 'Equity: Ksh10,000 debited from A/C XXX123 on 09/04/26. Ref: ATM Withdrawal. Bal: Ksh25,000.',
+  },
 ],
 ```
 
-### Changing Currency
+### Currency
 
-Set `currency` in the config. The LLM uses this in parsing prompts:
-
+Set your currency code:
 ```typescript
 currency: 'KES',  // Kenyan Shilling
+currency: 'NGN',  // Nigerian Naira
+currency: 'ZAR',  // South African Rand
+currency: 'GHS',  // Ghanaian Cedi
 ```
 
-### Adjusting Cron Schedules
+### Categories
 
-All schedules are in UTC. Modify in the config:
-
+The AI uses these as suggestions but can assign any category. Add categories that match your spending:
 ```typescript
-weeklySummary: '0 19 * * 0',    // Sundays 7pm UTC
-budgetAlerts: '0 9 * * *',      // Daily 9am UTC
+categories: ['food', 'transport', 'rent', 'groceries', 'airtime', 'utilities', 'salary', 'other'],
 ```
 
-## Cost
+### Cron Schedules
 
-~$0.50/month for typical usage (500 SMS + 200 Telegram queries). Neon and Telegram are free.
+All times are UTC. Adjust to your timezone:
+```typescript
+weeklySummary: '0 19 * * 0',      // Sundays 7pm UTC
+monthlySummary: '0 8 1 * *',      // 1st of month 8am UTC
+budgetAlerts: '0 9 * * *',        // Daily 9am UTC
+anomalyDetection: '5 9 * * *',    // Daily 9:05am UTC
+```
+
+---
+
+## How Transfer Detection Works
+
+When you move money between your own accounts (e.g., bank → mobile money), you get two SMS:
+- Bank: "500 debited"
+- Mobile money: "500 received"
+
+Without handling this, your spending would be inflated by the full transfer amount. PennyWatch automatically matches these by checking:
+- Same amount (within a small fee tolerance)
+- Opposite direction (one debit, one credit)
+- Different source (different banks/services)
+- Within 10 minutes of each other
+
+Matched transactions are linked and excluded from spending totals. If the system gets it wrong, use `/not_transfer <id>` to unlink them.
+
+---
+
+## Architecture
+
+```
+src/
+├── index.ts                 # Express server, mounts routes, starts cron
+├── config.ts                # Reads pennywatch.config.ts
+├── utils/format.ts          # Shared currency formatting and Markdown escaping
+├── db/
+│   ├── client.ts            # Postgres connection pools
+│   ├── migrate.ts           # Migration runner
+│   └── migrations/          # SQL migrations
+├── sms/
+│   ├── router.ts            # POST /api/sms endpoint
+│   ├── parser.ts            # LLM classification and parsing
+│   ├── dedup.ts             # SHA-256 deduplication
+│   └── notifications.ts     # Telegram notifications for new transactions
+├── transfers/
+│   └── matcher.ts           # Cross-platform transfer detection
+├── budgets/
+│   └── service.ts           # Budget CRUD and threshold alerts
+├── telegram/
+│   ├── bot.ts               # Telegraf bot setup and command routing
+│   ├── commands.ts          # Quick command handlers
+│   └── nlp.ts               # Natural language → SQL queries
+└── cron/
+    ├── scheduler.ts          # Cron job registration
+    ├── weekly-summary.ts     # Weekly spending report
+    ├── monthly-summary.ts    # Monthly report with trends and streaks
+    ├── budget-alerts.ts      # Budget threshold checker
+    └── anomaly-detection.ts  # Spending anomaly detector
+```
+
+---
+
+## Cost Estimate
+
+| Service | Cost |
+|---------|------|
+| Neon Postgres | $0 (free tier: 0.5 GB) |
+| Claude Haiku 4.5 | ~$0.50/mo (500 SMS + 200 queries) |
+| Telegram Bot API | $0 |
+| VPS (if needed) | $4-5/mo |
+| **Total** | **$0.50 - $5/month** |
+
+---
+
+## Troubleshooting
+
+### Bot not responding
+```bash
+sudo journalctl -u pennywatch -n 50 --no-pager
+```
+Common issues:
+- Missing `?sslmode=require` in database URL
+- Wrong Telegram bot token or chat ID
+- HTTPS not configured (Telegram requires it for webhooks)
+
+### SMS not being logged
+1. Check the audit log: query `SELECT * FROM sms_audit_log ORDER BY created_at DESC LIMIT 10`
+2. If audit log is empty → the iOS Shortcut isn't firing (check automation settings)
+3. If audit log shows `invalid` → the Shortcut is sending empty body (check Shortcut Input mapping)
+4. If audit log shows `unparsed` → the LLM couldn't parse it (add a bank example to your config)
+
+### Duplicate transactions
+The dedup system uses SHA-256 of the SMS body. If you see duplicates, they have slightly different text (extra whitespace, etc.). Check `raw_sms` in the transactions table.
+
+### Markdown errors in Telegram
+Special characters in merchant names (underscores, asterisks) can break Telegram's Markdown. PennyWatch escapes these, but if you see issues, check the server logs for send errors.
+
+---
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE)

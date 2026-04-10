@@ -1,6 +1,7 @@
 import { query } from '../db/client.js';
 import { bot } from '../telegram/bot.js';
 import { config } from '../config.js';
+import { fmtAmount } from '../utils/format.js';
 
 interface CategoryComparison {
   category: string;
@@ -15,14 +16,10 @@ interface WeeklySummaryData {
   transfersTotal: number;
 }
 
-function fmtGhs(n: number): string {
-  return n.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
 export function formatWeeklySummary(data: WeeklySummaryData): string {
   let msg = `📊 *Weekly Summary*\n\n`;
-  msg += `Total Spent: GHS ${fmtGhs(data.totalSpent)}\n`;
-  msg += `Total Received: GHS ${fmtGhs(data.totalReceived)}\n\n`;
+  msg += `Total Spent: ${fmtAmount(data.totalSpent)}\n`;
+  msg += `Total Received: ${fmtAmount(data.totalReceived)}\n\n`;
 
   if (data.categories.length > 0) {
     msg += `*By Category:*\n`;
@@ -33,12 +30,12 @@ export function formatWeeklySummary(data: WeeklySummaryData): string {
         const arrow = pctChange >= 0 ? '↑' : '↓';
         change = ` ${arrow}${Math.abs(pctChange)}% from last week`;
       }
-      msg += `• ${cat.category}: GHS ${fmtGhs(cat.total)}${change}\n`;
+      msg += `• ${cat.category}: ${fmtAmount(cat.total)}${change}\n`;
     }
   }
 
   if (data.transfersTotal > 0) {
-    msg += `\n💸 Internal transfers: GHS ${fmtGhs(data.transfersTotal)}`;
+    msg += `\n💸 Internal transfers: ${fmtAmount(data.transfersTotal)}`;
   }
 
   return msg;

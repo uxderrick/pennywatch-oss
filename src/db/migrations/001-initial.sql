@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS transactions (
   raw_sms TEXT NOT NULL,
   sms_hash VARCHAR(64) NOT NULL UNIQUE,
   amount DECIMAL(12, 2) NOT NULL,
-  currency VARCHAR(3) NOT NULL DEFAULT 'GHS',
+  currency VARCHAR(3) NOT NULL,
   direction VARCHAR(6) NOT NULL CHECK (direction IN ('credit', 'debit')),
   type VARCHAR(10) NOT NULL DEFAULT 'expense' CHECK (type IN ('expense', 'income', 'transfer')),
   merchant TEXT,
@@ -48,4 +48,25 @@ CREATE TABLE IF NOT EXISTS budget_alerts_sent (
   month VARCHAR(7) NOT NULL,
   sent_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (category, threshold, month)
+);
+
+-- SMS audit log
+CREATE TABLE IF NOT EXISTS sms_audit_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  sms_body TEXT NOT NULL,
+  sender TEXT,
+  received_at TEXT,
+  status VARCHAR(20) NOT NULL,
+  transaction_id UUID,
+  error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Balance snapshots
+CREATE TABLE IF NOT EXISTS balance_snapshots (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  source VARCHAR(50) NOT NULL,
+  balance DECIMAL(12, 2) NOT NULL,
+  raw_sms TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

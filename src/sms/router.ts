@@ -7,6 +7,7 @@ import { classifySms, parseSms } from './parser.js';
 import { detectTransfer } from '../transfers/matcher.js';
 import { checkBudgetThresholds } from '../budgets/service.js';
 import { notifyUnparsed, notifyNewTransaction } from './notifications.js';
+import { bot } from '../telegram/bot.js';
 
 export const smsRouter = Router();
 
@@ -106,15 +107,17 @@ smsRouter.post('/api/sms', async (req, res) => {
 
   const result = await query(
     `INSERT INTO transactions (raw_sms, sms_hash, amount, currency, direction, type, merchant, category, source, sender, transaction_date)
-     VALUES ($1, $2, $3, 'GHS', $4, $5, $6, $7, $8, $9, $10)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
      RETURNING id`,
-    [sms_body, smsHash, parsed.amount, parsed.direction, type, parsed.merchant, parsed.category, parsed.source, sender, transactionDate],
+    [sms_body, smsHash, parsed.amount, config.currency, parsed.direction, type, parsed.merchant, parsed.category, parsed.source, sender, transactionDate],
   );
 
   const transactionId = result.rows[0].id;
 
   await detectTransfer(transactionId);
-  checkBudgetThresholds(parsed.category).catch(console.error);
+  checkBudgetThresholds(parsed.category).then(alert => {
+    if (alert) bot.telegram.sendMessage(config.telegramChatId, alert).catch(console.error);
+  }).catch(console.error);
 
   setTimeout(() => {
     notifyNewTransaction(transactionId).catch(console.error);

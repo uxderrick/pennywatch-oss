@@ -1,5 +1,6 @@
 import { query } from '../db/client.js';
 import { setBudget, listBudgets } from '../budgets/service.js';
+import { fmtCurrency, fmtAmount, esc } from '../utils/format.js';
 
 interface CategoryTotal {
   category: string;
@@ -16,29 +17,21 @@ interface RecentTransaction {
   transaction_date: Date;
 }
 
-function fmtGhs(n: number): string {
-  return n.toLocaleString('en-GH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function esc(s: string): string {
-  return s.replace(/_/g, '\\_').replace(/\*/g, '\\*').replace(/\[/g, '\\[').replace(/`/g, '\\`');
-}
-
 export function formatSummary(data: CategoryTotal[], total: number): string {
   if (data.length === 0) return '📊 No spending recorded this month yet.';
-  let msg = `📊 *Spending Summary — ${new Date().toLocaleString('en-GH', { month: 'long', year: 'numeric' })}*\n\n`;
+  let msg = `📊 *Spending Summary — ${new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })}*\n\n`;
   for (const { category, total: catTotal } of data) {
     const pct = Math.round((catTotal / total) * 100);
-    msg += `• ${esc(category)}: GHS ${fmtGhs(catTotal)} (${pct}%)\n`;
+    msg += `• ${esc(category)}: ${fmtAmount(catTotal)} (${pct}%)\n`;
   }
-  msg += `\n*Total: GHS ${fmtGhs(total)}*`;
+  msg += `\n*Total: ${fmtAmount(total)}*`;
   return msg;
 }
 
 export function formatBalance(credits: number, debits: number): string {
   const net = credits - debits;
   const sign = net >= 0 ? '+' : '';
-  return `💰 *Cash Flow — ${new Date().toLocaleString('en-GH', { month: 'long', year: 'numeric' })}*\n\nIncome: GHS ${fmtGhs(credits)}\nSpending: GHS ${fmtGhs(debits)}\nNet: ${sign}GHS ${fmtGhs(net)}`;
+  return `💰 *Cash Flow — ${new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })}*\n\nIncome: ${fmtAmount(credits)}\nSpending: ${fmtAmount(debits)}\nNet: ${sign}${fmtAmount(Math.abs(net))}`;
 }
 
 export function formatRecent(txns: RecentTransaction[]): string {
@@ -46,8 +39,8 @@ export function formatRecent(txns: RecentTransaction[]): string {
   let msg = '📋 *Recent Transactions*\n\n';
   for (const t of txns) {
     const arrow = t.direction === 'credit' ? '🟢' : '🔴';
-    const date = t.transaction_date.toLocaleDateString('en-GH', { day: 'numeric', month: 'short' });
-    msg += `${arrow} GHS ${fmtGhs(t.amount)} — ${esc(t.merchant || 'Unknown')} (${esc(t.category)})\n   ${date} via ${esc(t.source)}\n   ID: \`${t.id.slice(0, 8)}\`\n\n`;
+    const date = t.transaction_date.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
+    msg += `${arrow} ${fmtAmount(t.amount)} — ${esc(t.merchant || 'Unknown')} (${esc(t.category)})\n   ${date} via ${esc(t.source)}\n   ID: \`${t.id.slice(0, 8)}\`\n\n`;
   }
   return msg;
 }
@@ -58,7 +51,7 @@ export function formatBudgetList(budgets: Array<{ category: string; monthly_limi
   for (const b of budgets) {
     const pct = Math.round((b.spent / b.monthly_limit) * 100);
     const bar = pct >= 100 ? '🔴' : pct >= 80 ? '🟡' : '🟢';
-    msg += `${bar} ${esc(b.category)}: GHS ${fmtGhs(b.spent)} / ${fmtGhs(b.monthly_limit)} (${pct}%)\n`;
+    msg += `${bar} ${esc(b.category)}: ${fmtAmount(b.spent)} / ${fmtCurrency(b.monthly_limit)} (${pct}%)\n`;
   }
   return msg;
 }
@@ -114,7 +107,7 @@ export async function handleTop(): Promise<string> {
   if (rows.length === 0) return '🏆 No spending data this month yet.';
   let msg = '🏆 *Top 5 Categories*\n\n';
   rows.forEach((r, i) => {
-    msg += `${i + 1}. ${esc(r.category)}: GHS ${fmtGhs(r.total)}\n`;
+    msg += `${i + 1}. ${esc(r.category)}: ${fmtAmount(r.total)}\n`;
   });
   return msg;
 }
@@ -136,7 +129,7 @@ export async function handleBudgetSet(args: string[]): Promise<string> {
   const amount = parseFloat(args[1]);
   if (isNaN(amount) || amount <= 0) return '❌ Amount must be a positive number.';
   await setBudget(category, amount);
-  return `✅ Budget set: ${category} → GHS ${fmtGhs(amount)}/month`;
+  return `✅ Budget set: ${category} → ${fmtAmount(amount)}/month`;
 }
 
 export async function handleBudgetList(): Promise<string> {
