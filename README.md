@@ -98,8 +98,8 @@ openssl rand -hex 32
 ### Step 2: Configure
 
 ```bash
-git clone https://github.com/uxderrick/pennywatch.git
-cd pennywatch
+git clone https://github.com/uxderrick/pennywatch-oss.git
+cd pennywatch-oss
 cp pennywatch.config.example.ts pennywatch.config.ts
 ```
 
